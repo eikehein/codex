@@ -1516,7 +1516,7 @@ impl App {
     }
 
     fn preview_image_protocol(&self, tui: &tui::Tui) -> Option<crate::pets::ImageProtocol> {
-        match tui.herdr_kitty_graphics {
+        match tui.kitty_graphics {
             Some(true) => Some(crate::pets::ImageProtocol::Kitty),
             Some(false) => None,
             None => self.chat_widget.pet_image_support().protocol(),

@@ -306,7 +306,7 @@ mod imp {
     pub(crate) fn startup(
         timeout: Duration,
         keyboard_probe: StartupKeyboardEnhancementProbe,
-        probe_herdr: bool,
+        probe_kitty_graphics: bool,
     ) -> io::Result<StartupProbe> {
         DA1_SUPPORTED.store(false, Ordering::Relaxed);
         let mut tty = Tty::open()?;
@@ -321,7 +321,7 @@ mod imp {
         }
         // Query before DA1 so its reply acts as a barrier even if mode 1007 is unsupported.
         query.extend_from_slice(b"\x1B[?1007$p");
-        if probe_herdr {
+        if probe_kitty_graphics {
             // Query a single inline RGB pixel without storing or displaying an image.
             query.extend_from_slice(b"\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\");
         }
@@ -338,10 +338,10 @@ mod imp {
             timeout,
             keyboard_probe,
             query_identity,
-            probe_herdr,
+            probe_kitty_graphics,
             &mut buffer,
         );
-        let (replay, kitty_graphics) = parse_startup_input(&buffer, probe_herdr);
+        let (replay, kitty_graphics) = parse_startup_input(&buffer, probe_kitty_graphics);
         crossterm::event::buffer_input(&replay)?;
         let saw_da1 = find_primary_device_attributes(&buffer).is_some();
         DA1_SUPPORTED.store(saw_da1, Ordering::Relaxed);
@@ -384,7 +384,7 @@ mod imp {
         timeout: Duration,
         keyboard_probe: StartupKeyboardEnhancementProbe,
         query_identity: bool,
-        probe_herdr: bool,
+        probe_kitty_graphics: bool,
         buffer: &mut Vec<u8>,
     ) -> io::Result<StartupProbe> {
         let deadline = Instant::now() + timeout;
@@ -402,7 +402,7 @@ mod imp {
                 keyboard_probe,
             );
             if startup_probe_complete(&probe, keyboard_probe)
-                && (!probe_herdr || find_primary_device_attributes(buffer).is_some())
+                && (!probe_kitty_graphics || find_primary_device_attributes(buffer).is_some())
             {
                 return Ok(probe);
             }
@@ -786,7 +786,7 @@ mod imp {
                 Duration::from_millis(/*millis*/ 5),
                 StartupKeyboardEnhancementProbe::Skip,
                 /*query_identity*/ true,
-                /*probe_herdr*/ false,
+                /*probe_kitty_graphics*/ false,
                 &mut buffer,
             )
             .expect("finish within probe deadline");
@@ -807,7 +807,7 @@ mod imp {
                 Duration::from_secs(/*secs*/ 1),
                 StartupKeyboardEnhancementProbe::Query,
                 /*query_identity*/ false,
-                /*probe_herdr*/ false,
+                /*probe_kitty_graphics*/ false,
                 &mut buffer,
             )
             .expect("read terminal responses after buffered typeahead");
@@ -829,7 +829,7 @@ mod imp {
             let mut expected_replay = vec![b'x'; 2_048];
             expected_replay.extend_from_slice(b"\x1B[20;10R\x1B[?64;1;2c\x1B[?7u");
             assert_eq!(
-                parse_startup_input(&buffer, /*probe_herdr*/ false),
+                parse_startup_input(&buffer, /*probe_kitty_graphics*/ false),
                 (expected_replay, false)
             );
         }

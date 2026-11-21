@@ -156,6 +156,20 @@ fn image_support_for_terminal_environment(info: &TerminalInfo) -> PetImageSuppor
     pet_image_support_for_terminal(info)
 }
 
+#[cfg(unix)]
+pub(crate) fn should_probe_kitty_graphics(
+    info: &TerminalInfo,
+    term: Option<&str>,
+    sty_present: bool,
+) -> bool {
+    // Orca explicitly negotiates images through ORCA_IMAGE_PROTOCOL. For other terminals,
+    // consult the immediate terminal identity: a Kitty window ID can be inherited from a host.
+    info.name != TerminalName::Orca
+        && is_direct_graphics_terminal(term, sty_present)
+        && pet_image_support_for_terminal(info)
+            == PetImageSupport::Unsupported(PetImageUnsupportedReason::Terminal)
+}
+
 fn supports_orca_kitty_graphics(
     info: &TerminalInfo,
     protocol: Option<&str>,
@@ -164,7 +178,11 @@ fn supports_orca_kitty_graphics(
 ) -> bool {
     info.multiplexer.is_none()
         && protocol == Some("kitty")
-        && !sty_present
+        && is_direct_graphics_terminal(term, sty_present)
+}
+
+fn is_direct_graphics_terminal(term: Option<&str>, sty_present: bool) -> bool {
+    !sty_present
         && !term.is_some_and(|term| {
             term == "dumb" || term.starts_with("screen") || term.starts_with("tmux")
         })
@@ -732,6 +750,40 @@ mod tests {
             )),
             PetImageSupport::Unsupported(PetImageUnsupportedReason::Terminal)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_unknown_image_protocols_only_on_direct_terminals() {
+        let mut info = terminal_info_for_test(
+            TerminalName::Unknown,
+            /*multiplexer*/ None,
+            Some("unrecognized-terminal"),
+            /*term*/ None,
+        );
+        let term = Some("xterm-256color");
+        assert!(should_probe_kitty_graphics(&info, term, false));
+        assert!(!should_probe_kitty_graphics(&info, term, true));
+        for wrapped in ["dumb", "screen-256color", "tmux-256color"] {
+            assert!(!should_probe_kitty_graphics(&info, Some(wrapped), false));
+        }
+        for name in [
+            TerminalName::Kitty,
+            TerminalName::Iterm2,
+            TerminalName::WindowsTerminal,
+            TerminalName::Orca,
+        ] {
+            info.name = name;
+            assert!(!should_probe_kitty_graphics(&info, term, false));
+        }
+        info.name = TerminalName::Unknown;
+        for mux in [
+            Multiplexer::Tmux { version: None },
+            Multiplexer::Zellij { version: None },
+        ] {
+            info.multiplexer = Some(mux);
+            assert!(!should_probe_kitty_graphics(&info, term, false));
+        }
     }
 
     #[test]

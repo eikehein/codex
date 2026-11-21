@@ -112,7 +112,7 @@ pub(crate) struct InitializedTerminal {
     pub(crate) terminal: Terminal,
     pub(crate) enhanced_keys_supported: bool,
     pub(crate) terminal_app_over_ssh: bool,
-    pub(crate) herdr_kitty_graphics: Option<bool>,
+    pub(crate) kitty_graphics: Option<bool>,
     pub(crate) stderr_guard: terminal_stderr::TerminalStderrGuard,
 }
 
@@ -518,10 +518,11 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
     let backend = CrosstermBackend::new(stdout());
 
     #[cfg(unix)]
-    let probe_herdr = {
-        let info = codex_terminal_detection::terminal_info();
-        info.multiplexer.is_none() && info.term_program.as_deref() == Some("herdr")
-    };
+    let probe_kitty_graphics = crate::pets::should_probe_kitty_graphics(
+        &codex_terminal_detection::terminal_info(),
+        std::env::var("TERM").ok().as_deref(),
+        std::env::var_os("STY").is_some(),
+    );
 
     #[cfg(unix)]
     let startup_probe = {
@@ -536,7 +537,7 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
         match crate::terminal_probe::startup(
             crate::terminal_probe::DEFAULT_TIMEOUT,
             keyboard_probe,
-            probe_herdr,
+            probe_kitty_graphics,
         ) {
             Ok(probe) => {
                 tracing::info!(
@@ -618,9 +619,9 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
         #[cfg(not(unix))]
         terminal_app_over_ssh: false,
         #[cfg(unix)]
-        herdr_kitty_graphics: probe_herdr.then_some(startup_probe.kitty_graphics),
+        kitty_graphics: probe_kitty_graphics.then_some(startup_probe.kitty_graphics),
         #[cfg(not(unix))]
-        herdr_kitty_graphics: None,
+        kitty_graphics: None,
         stderr_guard,
     };
     restore_guard.active = false;
@@ -752,7 +753,7 @@ pub struct Tui {
     enhanced_keys_supported: bool,
     // Cache the startup result so later configuration loads use the same terminal policy.
     pub(crate) terminal_app_over_ssh: bool,
-    pub(crate) herdr_kitty_graphics: Option<bool>,
+    pub(crate) kitty_graphics: Option<bool>,
     notification_backend: Option<DesktopNotificationBackend>,
     notification_condition: NotificationCondition,
     scrollback: ScrollbackStrategy,
@@ -831,7 +832,7 @@ impl Tui {
             terminal_focused: Arc::new(AtomicBool::new(true)),
             enhanced_keys_supported,
             terminal_app_over_ssh: false,
-            herdr_kitty_graphics: None,
+            kitty_graphics: None,
             notification_backend: Some(detect_backend(NotificationMethod::default())),
             notification_condition: NotificationCondition::default(),
             scrollback,
